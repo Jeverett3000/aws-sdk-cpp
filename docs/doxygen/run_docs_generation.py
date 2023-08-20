@@ -21,9 +21,7 @@ def parse_arguments() -> dict:
     parser.add_argument("--sdk_root", type=str, help="Path to the SDK repo root",
                         default=str(Path(__file__).parents[2]))
     parser.add_argument("--output_dir", type=str, help="Path where to store generated docs", required=True)
-    args = vars(parser.parse_args())
-
-    return args
+    return vars(parser.parse_args())
 
 
 class DocsGenerator(object):
@@ -37,9 +35,9 @@ class DocsGenerator(object):
 
         self.components = {"core": ["aws-cpp-sdk-core"]}
         libs = [lib for lib in os.listdir(f"{sdk_root}/src") if lib != "aws-cpp-sdk-core"]
-        self.components.update({"libs": libs})
-        clients = [client for client in os.listdir(f"{sdk_root}/generated/src")]
-        self.components.update({"clients": clients})
+        self.components["libs"] = libs
+        clients = list(os.listdir(f"{sdk_root}/generated/src"))
+        self.components["clients"] = clients
 
 
 def main():

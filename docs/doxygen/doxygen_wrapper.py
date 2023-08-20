@@ -32,7 +32,9 @@ class DoxygenWrapper(object):
         if int(self.doxygen_version.split(".")[0]) != 1 or int(self.doxygen_version.split(".")[1]) < 9:
             raise Exception(f"Invalid doxygen version: {self.doxygen_version}. Expected 1.9 at least.")
 
-        self.configuration_file = os.path.dirname(os.path.abspath(__file__)) + "/config/Doxyfile-prj.cfg"
+        self.configuration_file = (
+            f"{os.path.dirname(os.path.abspath(__file__))}/config/Doxyfile-prj.cfg"
+        )
         if sdk_version:
             self.sdk_version = sdk_version
         else:
@@ -43,7 +45,7 @@ class DoxygenWrapper(object):
             self.output_dir = DOXYGEN_OUTPUT_DIR
         self.thread_pool = thread_pool
 
-        self.components_in_src = set(os.listdir(sdk_root + "/src"))
+        self.components_in_src = set(os.listdir(f"{sdk_root}/src"))
         self.components_in_src.remove("aws-cpp-sdk-core")
 
     @staticmethod
@@ -51,7 +53,7 @@ class DoxygenWrapper(object):
         """Returns current SDK version from a VersionConfig.h
         :param sdk_root (str): filepath (absolute or relative) to the sdk root dir
         """
-        with open(sdk_root + "/src/aws-cpp-sdk-core/include/aws/core/VersionConfig.h") as version_config_file:
+        with open(f"{sdk_root}/src/aws-cpp-sdk-core/include/aws/core/VersionConfig.h") as version_config_file:
             version_config = version_config_file.read()
             m_major = re.search("#define AWS_SDK_VERSION_MAJOR (?P<version_major>\d+)", version_config)
             m_minor = re.search("#define AWS_SDK_VERSION_MINOR (?P<version_minor>\d+)", version_config)
@@ -73,12 +75,11 @@ class DoxygenWrapper(object):
         except subprocess.CalledProcessError as exc:
             print(f"Failed to call doxygen: {exc},\n{exc.stdout},\n{exc.stderr}")
             raise exc
-        output = process.stdout.decode().replace("\n", "")
-        return output
+        return process.stdout.decode().replace("\n", "")
 
     def _create_dependency_map(self):
-        shutil.rmtree(self.sdk_root + "/tmp_deps_map_build", ignore_errors=True)
-        os.makedirs(self.sdk_root + "/tmp_deps_map_build", exist_ok=True)
+        shutil.rmtree(f"{self.sdk_root}/tmp_deps_map_build", ignore_errors=True)
+        os.makedirs(f"{self.sdk_root}/tmp_deps_map_build", exist_ok=True)
         subprocess.run([CMAKE_EXE,
                         "-GNinja",
                         "-Btmp_deps_map_build",
@@ -96,7 +97,7 @@ class DoxygenWrapper(object):
                        shell=True)
 
         dependency_map = {}
-        for line in fileinput.input(self.sdk_root + "/tmp_deps_map_build/aws-cpp-sdk-formatted.dot", inplace=True):
+        for line in fileinput.input(f"{self.sdk_root}/tmp_deps_map_build/aws-cpp-sdk-formatted.dot", inplace=True):
             line = line.replace(" ", "")
             dependency_tuple = line.split('->')
             if "crt" in dependency_tuple[1]:
@@ -106,7 +107,7 @@ class DoxygenWrapper(object):
             else:
                 dependency_map[dependency_tuple[0]] = [dependency_tuple[1].strip()]
 
-        shutil.rmtree(self.sdk_root + "/tmp_deps_map_build", ignore_errors=True)
+        shutil.rmtree(f"{self.sdk_root}/tmp_deps_map_build", ignore_errors=True)
         return dependency_map
 
     def _create_layout_file(self, dependency_map):
@@ -119,10 +120,10 @@ class DoxygenWrapper(object):
                 for module in sorted(dependency_map.keys()):
                     print(f'\t\t\t<tab type="user" url="../../{module}/html/annotated.html" title="{module}"/>')
             else:
-                print('{}'.format(line), end='')
+                print(f'{line}', end='')
 
     def _get_src_path(self, component_name):
-        if "root" == component_name:
+        if component_name == "root":
             return f"\"docs\""
         if component_name == "aws-cpp-sdk-core" or component_name in self.components_in_src:
             return f"\"src/{component_name}\""
@@ -130,13 +131,6 @@ class DoxygenWrapper(object):
             return f"\"generated/src/{component_name}/\""
 
     def _get_doc_path(self, component_name):
-        if False: # TODO: docs dir structuring
-            if component_name == "aws-cpp-sdk-core":
-                return f"{self.output_dir}/core/{component_name}"
-            elif component_name in self.components_in_src:
-                return f"{self.output_dir}/libs/{component_name}"
-            else:
-                return f"{self.output_dir}/clients/{component_name}"
         return f"{self.output_dir}/{component_name}"
 
     def _get_tagfiles_dependency(self, component_name, dependency_map):
@@ -147,7 +141,7 @@ class DoxygenWrapper(object):
 
     def _cleanup_temp_files(self):
         # cmake cache used to build dependency tree
-        shutil.rmtree(self.sdk_root + "/tmp_deps_map_build", ignore_errors=True)
+        shutil.rmtree(f"{self.sdk_root}/tmp_deps_map_build", ignore_errors=True)
         os.remove(f"{self.output_dir}/DoxygenLayout.xml")
 
         def _cleanup_dir_by_extension(child_dir: Path, extension: str):
@@ -194,8 +188,7 @@ class DoxygenWrapper(object):
                "DOXYGEN_LAYOUT": f"{self.output_dir}/DoxygenLayout.xml",
                "PREDEFINED": ""}
 
-        doxy_output = self._call_doxygen(self.configuration_file, env, cwd=self.sdk_root)
-        return doxy_output
+        return self._call_doxygen(self.configuration_file, env, cwd=self.sdk_root)
 
     def process_one_client_async(self, dependency_map, client_name, thread_pool, client_futures):
         # Wait for dependencies to be processed
@@ -230,7 +223,7 @@ class DoxygenWrapper(object):
                                                                        self.thread_pool, client_futures)
 
         # Wait for all generation to complete
-        for client, future in client_futures.items():
+        for future in client_futures.values():
             future.result()
 
         self._cleanup_temp_files()

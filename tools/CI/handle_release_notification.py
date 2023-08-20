@@ -16,11 +16,9 @@ s3 = boto3.client('s3')
 
 def lambda_handler(event, context):
     message = event['Records'][0]['Sns']['Message']
-    print("From SNS: " + message)
+    print(f"From SNS: {message}")
 
-    releasesDoc = {}
-    releasesDoc['releases'] = []
-
+    releasesDoc = {'releases': []}
     pendingReleases = None
 
     try:
@@ -28,7 +26,7 @@ def lambda_handler(event, context):
         body_stream_to_file(pendingReleases["Body"].read())
         releasesDoc = read_zipped_release_doc()
     except ClientError as e:
-        print("Couldn't pull doc, assuming it is empty. exception " + e.message)
+        print(f"Couldn't pull doc, assuming it is empty. exception {e.message}")
 
     releasesDoc['releases'].append(json.loads(message)["release"])
     write_zipped_release_doc(releasesDoc)
@@ -44,10 +42,10 @@ def read_zipped_release_doc():
     
 def write_zipped_release_doc(doc):
     releasesDocStr = json.dumps(doc)
-    print("New Release Doc: " + releasesDocStr)
+    print(f"New Release Doc: {releasesDocStr}")
     with open(temp_artifact_file, "w") as artifactFile:
         artifactFile.write(releasesDocStr)
-        
+
     with zipfile.ZipFile(temp_archive_file, 'w') as archiveStream:
         archiveStream.write(temp_artifact_file, artifact)
 

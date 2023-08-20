@@ -76,7 +76,9 @@ def call_git(cwd: str, timeout: int, command: str):
 
 
 def main():
-    if not os.path.isfile(os.getcwd() + "/" + PREFETCH_DEPS_SH_NAME) or not os.path.isdir(os.getcwd() + "/" + CRT_DIR):
+    if not os.path.isfile(
+        f"{os.getcwd()}/{PREFETCH_DEPS_SH_NAME}"
+    ) or not os.path.isdir(f"{os.getcwd()}/{CRT_DIR}"):
         print(f"Please run this script from root of the repo, {PREFETCH_DEPS_SH_NAME} or CRT are not found")
         return -1
 
@@ -93,10 +95,10 @@ def main():
 
     print(f"Now updating script {PREFETCH_DEPS_SH_NAME}")
 
-    crt_cpp_hash = call_git(cwd=CRT_DIR, timeout=10, command=f"rev-parse HEAD")
+    crt_cpp_hash = call_git(cwd=CRT_DIR, timeout=10, command="rev-parse HEAD")
 
     crt_cpp_c_module_dirs = sorted(os.listdir(f"{CRT_DIR}/crt"))
-    crt_cpp_c_modules = list()
+    crt_cpp_c_modules = []
     for c_module_dir in crt_cpp_c_module_dirs:
         crt_c_module_git_dir = f"{CRT_DIR}/crt/{c_module_dir}"
         c_module_hash = call_git(cwd=crt_c_module_git_dir, timeout=10, command="rev-parse HEAD")

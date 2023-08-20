@@ -36,20 +36,19 @@ def ParseArguments():
 
     args = vars( parser.parse_args() )
 
-    argMap = {}
-    argMap[ "clean" ] = args[ "clean" ]
-    argMap[ "abi" ] = args[ "abi" ] or "armeabi-v7a"
-    argMap[ "avd" ] = args[ "avd" ]
-    argMap[ "useExistingEmulator" ] = args[ "emu" ]
-    argMap[ "noBuild" ] = args[ "nobuild" ]
-    argMap[ "noInstall" ] = args[ "noinstall" ]
-    argMap[ "credentialsFile" ] = args[ "credentials" ] or "~/.aws/credentials"
-    argMap[ "buildType" ] = args[ "build" ] or "Release"
-    argMap[ "runTest" ] = args[ "runtest" ]
-    argMap[ "so" ] = args[ "so" ]
-    argMap[ "stl" ] = args[ "stl" ] or "libc++_shared"
-
-    return argMap
+    return {
+        "clean": args["clean"],
+        "abi": args["abi"] or "armeabi-v7a",
+        "avd": args["avd"],
+        "useExistingEmulator": args["emu"],
+        "noBuild": args["nobuild"],
+        "noInstall": args["noinstall"],
+        "credentialsFile": args["credentials"] or "~/.aws/credentials",
+        "buildType": args["build"] or "Release",
+        "runTest": args["runtest"],
+        "so": args["so"],
+        "stl": args["stl"] or "libc++_shared",
+    }
 
 
 def IsValidABI(abi):
@@ -61,10 +60,10 @@ def ShouldBuildClean(abi, buildDir):
         return True
 
     abiPattern = re.compile("ANDROID_ABI:STRING=\s*(?P<abi>\S+)")
-    for _, line in enumerate(open(buildDir + "/CMakeCache.txt")):
+    for line in open(f"{buildDir}/CMakeCache.txt"):
         result = abiPattern.search(line)
         if result != None:
-            return result.group("abi") != abi
+            return result["abi"] != abi
 
     return False
 
@@ -76,15 +75,15 @@ def BuildAvdAbiSet():
     avdABIs = {}
     currentName = None
 
-    for _, line in enumerate(avdList.splitlines()):
+    for line in avdList.splitlines():
         if not currentName:
             nameResult = namePattern.search(line)
             if nameResult != None:
-                currentName = nameResult.group("name")
+                currentName = nameResult["name"]
         else:
             abiResult = abiPattern.search(line)
             if abiResult != None:
-                avdABIs[currentName] = abiResult.group("abi")
+                avdABIs[currentName] = abiResult["abi"]
                 currentName = None
 
     return avdABIs
@@ -92,17 +91,20 @@ def BuildAvdAbiSet():
 
 def DoesAVDSupportABI(avdAbi, abi):
     if avdAbi == "armeabi-v7a":
-        return abi == "armeabi-v7a" or abi == "armeabi"
+        return abi in ["armeabi-v7a", "armeabi"]
     else:
         return abi == avdAbi
 
 
 def FindAVDForABI(abi, avdABIs):  
-    for avdName in avdABIs:
-        if DoesAVDSupportABI(avdABIs[avdName], abi):
-            return avdName
-
-    return None
+    return next(
+        (
+            avdName
+            for avdName in avdABIs
+            if DoesAVDSupportABI(avdABIs[avdName], abi)
+        ),
+        None,
+    )
 
 
 def IsValidAVD(avd, abi, avdABIs):
@@ -120,11 +122,11 @@ def ValidateArguments(buildDir, avd, abi, clean, runTest, buildSharedObjects):
  
     validTests = GetTestList( buildSharedObjects )
     if runTest not in validTests:
-        print( 'Invalid value for runtest option: ' + runTest )
+        print(f'Invalid value for runtest option: {runTest}')
         print( 'Valid values are: ' )
         print( '  ' + ", ".join( validTests ) )
         raise ArgumentException('runtest', runTest)
-        
+
     if not IsValidABI(abi):
         print('Invalid argument value for abi: ', abi)
         print('  Valid values are "armeabi-v7a"')
@@ -210,17 +212,21 @@ def BuildNative(abi, clean, buildDir, jniDir, installDir, buildType, buildShared
         else:
             link_type_line = "-DBUILD_SHARED_LIBS=ON"
 
-        subprocess.check_call( [ "cmake", 
-                                 link_type_line,
-                                 "-DCUSTOM_MEMORY_MANAGEMENT=ON",
-                                 "-DTARGET_ARCH=ANDROID", 
-                                 "-DANDROID_ABI=" + abi, 
-                                 "-DANDROID_STL=" + stl,
-                                 "-DCMAKE_BUILD_TYPE=" + buildType,
-                                 "-DENABLE_UNITY_BUILD=ON",
-                                 '-DTEST_CERT_PATH="/data/data/aws.' + TestLowerName + '/certs"',
-                                 '-DBUILD_ONLY=dynamodb;sqs;s3;lambda;kinesis;cognito-identity;transfer;iam;identity-management;access-management;s3-encryption',
-                                 ".."] )
+        subprocess.check_call(
+            [
+                "cmake",
+                link_type_line,
+                "-DCUSTOM_MEMORY_MANAGEMENT=ON",
+                "-DTARGET_ARCH=ANDROID",
+                f"-DANDROID_ABI={abi}",
+                f"-DANDROID_STL={stl}",
+                f"-DCMAKE_BUILD_TYPE={buildType}",
+                "-DENABLE_UNITY_BUILD=ON",
+                f'-DTEST_CERT_PATH="/data/data/aws.{TestLowerName}/certs"',
+                '-DBUILD_ONLY=dynamodb;sqs;s3;lambda;kinesis;cognito-identity;transfer;iam;identity-management;access-management;s3-encryption',
+                "..",
+            ]
+        )
     else:
         os.chdir( buildDir )
 
@@ -247,9 +253,8 @@ def IsAnEmulatorRunning():
     emulatorPattern = re.compile("(?P<emu>emulator-\d+)")
     emulatorList = subprocess.check_output(["adb", "devices"])
 
-    for _, line in enumerate(emulatorList.splitlines()):
-        result = emulatorPattern.search(line)
-        if result:
+    for line in emulatorList.splitlines():
+        if result := emulatorPattern.search(line):
             return True
 
     return False
@@ -259,10 +264,9 @@ def KillRunningEmulators():
     emulatorPattern = re.compile("(?P<emu>emulator-\d+)")
     emulatorList = subprocess.check_output(["adb", "devices"])
 
-    for _, line in enumerate(emulatorList.splitlines()):
-        result = emulatorPattern.search(line)
-        if result:
-            emulatorName = result.group( "emu" )
+    for line in emulatorList.splitlines():
+        if result := emulatorPattern.search(line):
+            emulatorName = result["emu"]
             subprocess.check_call( [ "adb", "-s", emulatorName, "emu", "kill" ] )
 
 
@@ -288,7 +292,7 @@ def InitializeEmulator(avd, useExistingEmu):
 
     if not IsAnEmulatorRunning():
         # this may not work on windows due to the shell and &
-        subprocess.Popen( "emulator -avd " + avd + " -gpu off &", shell=True ).communicate()
+        subprocess.Popen(f"emulator -avd {avd} -gpu off &", shell=True).communicate()
 
     WaitForEmulatorToBoot()
 
@@ -298,13 +302,19 @@ def BuildAndInstallCertSet(pemSourceDir, buildDir):
     # android's default cert set does not allow verification of Amazon's cert chain, so we build, install, and use our own set that works
     certDir = os.path.join( buildDir, "certs" )
     pemSourceFile = os.path.join( pemSourceDir, "cacert.pem" )
-    
+
     # assume that if the directory exists, then the cert set is valid and we just need to upload
     if not os.path.exists( certDir ):
         os.makedirs( certDir )
-    
+
         # extract all the certs in curl's master cacert.pem file out into individual .pem files
-        subprocess.check_call( "cat " + pemSourceFile + " | awk '{print > \"" + certDir + "/cert\" (1+n) \".pem\"} /-----END CERTIFICATE-----/ {n++}'", shell = True )
+        subprocess.check_call(
+            f"cat {pemSourceFile}"
+            + " | awk '{print > \""
+            + certDir
+            + "/cert\" (1+n) \".pem\"} /-----END CERTIFICATE-----/ {n++}'",
+            shell=True,
+        )
 
         # use openssl to transform the certs into the hashname form that curl/openssl expects
         subprocess.check_call( "c_rehash certs", shell = True, cwd = buildDir )
@@ -313,8 +323,12 @@ def BuildAndInstallCertSet(pemSourceDir, buildDir):
         shutil.copy(os.path.join( pemSourceDir, "certs", "415660c1.0" ), certDir)
         shutil.copy(os.path.join( pemSourceDir, "certs", "7651b327.0" ), certDir)
 
-    subprocess.check_call( [ "adb", "shell", "rm -rf /data/data/aws." + TestLowerName + "/certs" ] )
-    subprocess.check_call( [ "adb", "shell", "mkdir /data/data/aws." + TestLowerName + "/certs" ] )
+    subprocess.check_call(
+        ["adb", "shell", f"rm -rf /data/data/aws.{TestLowerName}/certs"]
+    )
+    subprocess.check_call(
+        ["adb", "shell", f"mkdir /data/data/aws.{TestLowerName}/certs"]
+    )
 
     # upload all the hashed certs to the emulator
     certPattern = re.compile(".*\.0$")
@@ -323,32 +337,77 @@ def BuildAndInstallCertSet(pemSourceDir, buildDir):
         for fileName in fileNames:
             if certPattern.search(fileName):
                 certFileName = os.path.join(rootDir, fileName)
-                subprocess.check_call( [ "adb", "push", certFileName, "/data/data/aws." + TestLowerName + "/certs" ] )
+                subprocess.check_call(
+                    [
+                        "adb",
+                        "push",
+                        certFileName,
+                        f"/data/data/aws.{TestLowerName}/certs",
+                    ]
+                )
 
 def UploadTestResources(resourcesDir):
     for rootDir, dirNames, fileNames in os.walk( resourcesDir ):
         for fileName in fileNames:
             resourceFileName = os.path.join( rootDir, fileName )
-            subprocess.check_call( [ "adb", "push", resourceFileName, os.path.join( "/data/data/aws." + TestLowerName + "/resources", fileName ) ] )
+            subprocess.check_call(
+                [
+                    "adb",
+                    "push",
+                    resourceFileName,
+                    os.path.join(
+                        f"/data/data/aws.{TestLowerName}/resources", fileName
+                    ),
+                ]
+            )
 
 def UploadAwsSigV4TestSuite(resourceDir):
     for rootDir, dirNames, fileNames in os.walk( resourceDir ):
         for fileName in fileNames:
             resourceFileName = os.path.join( rootDir, fileName )
             subDir = os.path.basename( rootDir )
-            subprocess.check_call( [ "adb", "push", resourceFileName, os.path.join( "/data/data/aws." + TestLowerName + "/resources", subDir, fileName ) ] )
+            subprocess.check_call(
+                [
+                    "adb",
+                    "push",
+                    resourceFileName,
+                    os.path.join(
+                        f"/data/data/aws.{TestLowerName}/resources",
+                        subDir,
+                        fileName,
+                    ),
+                ]
+            )
 
 
 def InstallTests(credentialsFile):
-    subprocess.check_call( [ "adb", "install", "-r", TestName + "/app/build/outputs/apk/app-debug.apk" ] )
+    subprocess.check_call(
+        [
+            "adb",
+            "install",
+            "-r",
+            f"{TestName}/app/build/outputs/apk/app-debug.apk",
+        ]
+    )
     subprocess.check_call( [ "adb", "logcat", "-c" ] ) # this doesn't seem to work
     if credentialsFile and credentialsFile != "":
         print( "uploading credentials" )
-        subprocess.check_call( [ "adb", "push", credentialsFile, "/data/data/aws." + TestLowerName + "/.aws/credentials" ] )
+        subprocess.check_call(
+            [
+                "adb",
+                "push",
+                credentialsFile,
+                f"/data/data/aws.{TestLowerName}/.aws/credentials",
+            ]
+        )
 
 
 def TestsAreRunning(timeStart):
-    shutdownCalledOutput = subprocess.check_output( "adb logcat -t " + timeStart + " *:V | grep \"Shutting down TestActivity\"; exit 0 ", shell = True )
+    shutdownCalledOutput = subprocess.check_output(
+        f"adb logcat -t {timeStart}"
+        + " *:V | grep \"Shutting down TestActivity\"; exit 0 ",
+        shell=True,
+    )
     return not shutdownCalledOutput
 
 
@@ -356,13 +415,19 @@ def RunTest(testName):
     time.sleep(5)
     print( "Attempting to unlock..." )
     subprocess.check_call( [ "adb", "-e", "shell", "input keyevent 82" ] )
-    
+
     logTime = datetime.datetime.now() + datetime.timedelta(minutes=-1) # the emulator and the computer do not appear to be in perfect sync
     logTimeString = logTime.strftime("\"%m-%d %H:%M:%S.000\"")
 
     time.sleep(5)
     print( "Attempting to run tests..." )
-    subprocess.check_call( [ "adb", "shell", "am start -e test " + testName + " -n aws." + TestLowerName + "/aws." + TestLowerName + ".RunSDKTests" ] )
+    subprocess.check_call(
+        [
+            "adb",
+            "shell",
+            f"am start -e test {testName} -n aws.{TestLowerName}/aws.{TestLowerName}.RunSDKTests",
+        ]
+    )
 
     time.sleep(10)
 
@@ -371,10 +436,13 @@ def RunTest(testName):
         time.sleep(5)
 
     print( "Saving logs..." )
-    subprocess.Popen( "adb logcat -t " + logTimeString + " *:V | grep -a NativeSDK > AndroidTestOutput.txt", shell=True )
+    subprocess.Popen(
+        f"adb logcat -t {logTimeString} *:V | grep -a NativeSDK > AndroidTestOutput.txt",
+        shell=True,
+    )
 
     print( "Cleaning up..." )
-    subprocess.check_call( [ "adb", "shell", "pm clear aws." + TestLowerName ] )
+    subprocess.check_call(["adb", "shell", f"pm clear aws.{TestLowerName}"])
 
 
 def DidAllTestsSucceed():
@@ -397,7 +465,7 @@ def Main():
     runTest = args[ "runTest" ]
     stl = args[ "stl" ]
 
-    buildDir = "_build" + buildType
+    buildDir = f"_build{buildType}"
     installDir = os.path.join( "external", abi );
 
     if runTest:

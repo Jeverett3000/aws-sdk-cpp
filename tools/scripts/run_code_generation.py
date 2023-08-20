@@ -24,7 +24,7 @@ PARTITIONS_FILE_LOCATION = "../partitions/partitions.json"  # Relative to models
 DEFAULTS_FILE_LOCATION = "../defaults/sdk-default-configuration.json"  # Relative to models dir
 DEFAULT_GENERATOR_LOCATION = "code-generation/generator/"
 GENERATOR_TARGET_DIR = "target"
-GENERATOR_JAR = GENERATOR_TARGET_DIR + "/aws-client-generator-1.0-SNAPSHOT-jar-with-dependencies.jar"
+GENERATOR_JAR = f"{GENERATOR_TARGET_DIR}/aws-client-generator-1.0-SNAPSHOT-jar-with-dependencies.jar"
 
 # Regexp to parse C2J model filename to extract service name and date version
 SERVICE_MODEL_FILENAME_PATTERN = re.compile(
@@ -89,7 +89,7 @@ def collect_available_models(models_dir: str, endpoint_rules_dir: str) -> dict:
     :return: dict<service_name, model_file_name> in models dir
     """
     model_files = os.listdir(models_dir)
-    service_name_to_model_filename_date = dict()
+    service_name_to_model_filename_date = {}
 
     for filename in model_files:
         if not os.path.isfile("/".join([models_dir, filename])):
@@ -99,15 +99,16 @@ def collect_available_models(models_dir: str, endpoint_rules_dir: str) -> dict:
         service_model_name = match.group("service")
         service_model_date = match.group("date")
         service_model_date = datetime.datetime.strptime(service_model_date, "%Y-%m-%d").date()
-        already_found_model = service_name_to_model_filename_date.get(service_model_name, None)
-        if already_found_model:
+        if already_found_model := service_name_to_model_filename_date.get(
+            service_model_name, None
+        ):
             already_found_date = already_found_model[1]
             if already_found_date < service_model_date:
                 service_name_to_model_filename_date[service_model_name] = (filename, service_model_date)
         else:
             service_name_to_model_filename_date[service_model_name] = (filename, service_model_date)
 
-    service_name_to_model_filename = dict()
+    service_name_to_model_filename = {}
     missing = set()
     for raw_key, model_file_date in service_name_to_model_filename_date.items():
         key = SERVICE_NAME_REMAPS.get(raw_key, raw_key)
@@ -132,11 +133,6 @@ def collect_available_models(models_dir: str, endpoint_rules_dir: str) -> dict:
                                                                c2j_model=model_file_date[0],
                                                                endpoint_rule_set=None,
                                                                endpoint_tests=None)
-    if missing:
-        # TODO: re-enable with endpoints introduction
-        # print(f"Missing endpoints for services: {missing}")
-        pass
-
     if service_name_to_model_filename.get("s3") and "s3-crt" not in service_name_to_model_filename:
         service_name_to_model_filename["s3-crt"] = service_name_to_model_filename["s3"]
 
@@ -175,16 +171,13 @@ def run_generator_once(service_name: str, run_command: list, output_filename: st
                                f"Code generator did not generate an output archive (and did not report failure!)")
 
     if output_filename != "STDOUT":
-        output_zip_file = output_filename
-    else:
-        output_zip_file = process.stdout
-        if not output_zip_file or len(output_zip_file) < 4:
-            raise RuntimeError(f"Code of {service_name} generation failure: "
-                               f"Code generator did not generate an output.\n"
-                               f"Error details: {process.stderr.decode()}")
-        output_zip_file = io.BytesIO(output_zip_file)
-
-    return output_zip_file
+        return output_filename
+    output_zip_file = process.stdout
+    if not output_zip_file or len(output_zip_file) < 4:
+        raise RuntimeError(f"Code of {service_name} generation failure: "
+                           f"Code generator did not generate an output.\n"
+                           f"Error details: {process.stderr.decode()}")
+    return io.BytesIO(output_zip_file)
 
 
 def extract_zip(zip_bytes: io.BytesIO, service_name: str, output_dir: str, dir_to_delete: str):
@@ -242,9 +235,8 @@ def generate_core_component(component_name: str,
         output_filename = "STDOUT"
 
     full_model_file_path = f"{models_dir}/{model_file_path}"
-    generator_jar = generator_filepath + "/" + GENERATOR_JAR
-    run_command = list()
-    run_command.append("java")
+    generator_jar = f"{generator_filepath}/{GENERATOR_JAR}"
+    run_command = ["java"]
     run_command += ["-jar", generator_jar]
     run_command += ["--inputfile", full_model_file_path]
     run_command += [f"--{component_name}", "global"]
@@ -279,7 +271,11 @@ def generate_single_client(service_name: str,
     :param kwargs: Additional optional arguments to pass to the code generator
     :return: (service_name, status_code), where 0 is success status_code
     """
-    if not service_name or service_name == "" or not model_files.c2j_model or model_files.c2j_model == "":
+    if (
+        not service_name
+        or not model_files.c2j_model
+        or model_files.c2j_model == ""
+    ):
         raise RuntimeError("Unknown client to generate!")
     # raw arguments to be passed from Py wrapper to the actual generator
     if not kwargs.get("language-binding"):
@@ -292,10 +288,9 @@ def generate_single_client(service_name: str,
     else:
         output_filename = "STDOUT"
 
-    model_filepath = models_filepath + "/" + model_files.c2j_model
-    generator_jar = generator_filepath + "/" + GENERATOR_JAR
-    run_command = list()
-    run_command.append("java")
+    model_filepath = f"{models_filepath}/{model_files.c2j_model}"
+    generator_jar = f"{generator_filepath}/{GENERATOR_JAR}"
+    run_command = ["java"]
     run_command += ["-jar", generator_jar]
     run_command += ["--inputfile", model_filepath]
     if model_files.endpoint_rule_set:
@@ -406,7 +401,7 @@ def parse_arguments() -> dict:
         if not os.path.exists(models_location):
             if args[cli_argument] is not None and args[cli_argument] != "":
                 raise RuntimeError(f"Provided {cli_argument} does not exist!")
-            models_location = str(Path(sys.path[0] + "/../" + default_value).absolute())
+            models_location = str(Path(f"{sys.path[0]}/../{default_value}").absolute())
             if not os.path.exists(models_location) and cli_argument != "path_to_endpoint_rules":
                 raise RuntimeError("Could not find api definitions location!")
         arg_map[cli_argument] = models_location
@@ -416,7 +411,9 @@ def parse_arguments() -> dict:
     if not os.path.exists(generator_location):
         if args["path_to_generator"] is not None and args["path_to_generator"] != "":
             raise RuntimeError("Provided path_to_generator does not exist!")
-        generator_location = str(Path(sys.path[0] + "/../" + DEFAULT_GENERATOR_LOCATION).absolute())
+        generator_location = str(
+            Path(f"{sys.path[0]}/../{DEFAULT_GENERATOR_LOCATION}").absolute()
+        )
         if not os.path.exists(generator_location):
             raise RuntimeError("Could not find generator location!")
     arg_map["path_to_generator"] = generator_location
@@ -424,10 +421,11 @@ def parse_arguments() -> dict:
     arg_map["prepare_tools"] = args["prepare_tools"] or False
     arg_map["list_all"] = args["list_all"] or False
 
-    raw_generator_arguments = dict()
-    for raw_argument in ["license-text", "namespace", "standalone"]:
-        if args.get(raw_argument):
-            raw_generator_arguments[raw_argument] = args[raw_argument]
+    raw_generator_arguments = {
+        raw_argument: args[raw_argument]
+        for raw_argument in ["license-text", "namespace", "standalone"]
+        if args.get(raw_argument)
+    }
     arg_map["raw_generator_arguments"] = raw_generator_arguments
 
     return arg_map

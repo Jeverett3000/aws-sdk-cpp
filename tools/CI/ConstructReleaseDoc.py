@@ -19,22 +19,16 @@ def Main():
 
     changes = args["changesList"]
 
-    changeDoc = {}
-
     changeList = changes.split()
-    releases = []
-    release = {}
     features = []
 
     for change in changeList:
-        feature = {}
-        feature["service-name"] = change.replace("aws-cpp-sdk-", "")
+        feature = {"service-name": change.replace("aws-cpp-sdk-", "")}
         features.append(feature)
-        
-    release["features"] = features
-    releases.append(release)
-    changeDoc["releases"] = releases
 
+    release = {"features": features}
+    releases = [release]
+    changeDoc = {"releases": releases}
     print(json.dumps(changeDoc))
 
 Main()

@@ -13,8 +13,6 @@ from os.path import isfile, join
 
 
 def parse_arguments():
-    arg_map = {}
-
     parser = argparse.ArgumentParser(description="Generates an SDK given an sdk name and version")
     parser.add_argument("--outputLocation", action="store")
     parser.add_argument("--serviceName", action="store")
@@ -33,20 +31,22 @@ def parse_arguments():
                         help="Mark operation functions in service client as virtual functions.", action="store_true")
 
     args = vars(parser.parse_args())
-    arg_map["outputLocation"] = args["outputLocation"] or "./"
-    arg_map["serviceName"] = args["serviceName"] or None
-    arg_map["clientConfigDefaults"] = args["clientConfigDefaults"] or None
-    arg_map["apiVersion"] = args["apiVersion"] or ""
-    arg_map["namespace"] = args["namespace"] or ""
-    arg_map["licenseText"] = args["licenseText"] or ""
-    arg_map["pathToApiDefinitions"] = args["pathToApiDefinitions"] or "./code-generation/api-descriptions"
-    arg_map["pathToGenerator"] = args["pathToGenerator"] or "./code-generation/generator"
-    arg_map["prepareTools"] = args["prepareTools"]
-    arg_map["standalone"] = args["standalone"]
-    arg_map["listAll"] = args["listAll"]
-    arg_map["enableVirtualOperations"] = args["enableVirtualOperations"]
-
-    return arg_map
+    return {
+        "outputLocation": args["outputLocation"] or "./",
+        "serviceName": args["serviceName"] or None,
+        "clientConfigDefaults": args["clientConfigDefaults"] or None,
+        "apiVersion": args["apiVersion"] or "",
+        "namespace": args["namespace"] or "",
+        "licenseText": args["licenseText"] or "",
+        "pathToApiDefinitions": args["pathToApiDefinitions"]
+        or "./code-generation/api-descriptions",
+        "pathToGenerator": args["pathToGenerator"]
+        or "./code-generation/generator",
+        "prepareTools": args["prepareTools"],
+        "standalone": args["standalone"],
+        "listAll": args["listAll"],
+        "enableVirtualOperations": args["enableVirtualOperations"],
+    }
 
 
 serviceNameRemaps = {
@@ -67,18 +67,23 @@ def discover_all_available_models(discovery_path):
     files_in_dir = [f for f in listdir(discovery_path) if isfile(join(discovery_path, f))]
 
     for file in files_in_dir:
-        match = re.search(r'([\w.-]+)-(\d{4}-\d{2}-\d{2}).normal.json', file)
-        if match:
-            service_name = match.group(1)
+        if match := re.search(
+            r'([\w.-]+)-(\d{4}-\d{2}-\d{2}).normal.json', file
+        ):
+            service_name = match[1]
             if service_name in serviceNameRemaps:
                 service_name = serviceNameRemaps[service_name]
 
-            sdk = {'service_name': service_name, 'apiVersion': match.group(2), 'filePath': join(discovery_path, file)}
-            sdks['{}-{}'.format(sdk['service_name'], sdk['apiVersion'])] = sdk
+            sdk = {
+                'service_name': service_name,
+                'apiVersion': match[2],
+                'filePath': join(discovery_path, file),
+            }
+            sdks[f"{sdk['service_name']}-{sdk['apiVersion']}"] = sdk
 
             if service_name == "s3":
                 s3crt = {'service_name': "s3-crt", 'apiVersion': sdk['apiVersion'], 'filePath': sdk['filePath']}
-                sdks['s3-crt-{}'.format(s3crt['apiVersion'])] = s3crt
+                sdks[f"s3-crt-{s3crt['apiVersion']}"] = s3crt
 
     return sdks
 
@@ -105,12 +110,11 @@ def generate_sdk(generator_path, sdk, output_dir, namespace, license_text, stand
             std_in_writer = writer(process.stdin)
             std_in_writer.write(api_content)
             process.stdin.close()
-            output = process.stdout.read()
-            if output:
+            if output := process.stdout.read():
                 with zipfile.ZipFile(output.strip().decode('utf-8'), 'r') as zipped:
                     zipped.extractall(output_dir)
     except EnvironmentError as ex:
-        print('Error generating sdk {} with error {}'.format(sdk, ex))
+        print(f'Error generating sdk {sdk} with error {ex}')
 
 
 def generate_defaults(generator_path, defaults_definition_path, output_dir, namespace, license_text):
@@ -125,14 +129,13 @@ def generate_defaults(generator_path, defaults_definition_path, output_dir, name
             std_in_writer = writer(process.stdin)
             std_in_writer.write(defaults_content)
             process.stdin.close()
-            output = process.stdout.read()
-            if output:
+            if output := process.stdout.read():
                 with zipfile.ZipFile(output.strip().decode('utf-8'), 'r') as zipped:
                     zipped.extractall(output_dir)
     except EnvironmentError as ex:
-        print('Error generating {} defaults with error {}'.format('global', ex))
+        print(f'Error generating global defaults with error {ex}')
     except Exception as ex:
-        print('Error generating {} defaults with error {}'.format('global', ex))
+        print(f'Error generating global defaults with error {ex}')
 
 
 def main():
@@ -148,13 +151,15 @@ def main():
             print(value)
 
     if arguments['serviceName']:
-        print('Generating {} api version {}.'.format(arguments['serviceName'], arguments['apiVersion']))
-        key = '{}-{}'.format(arguments['serviceName'], arguments['apiVersion'])
+        print(
+            f"Generating {arguments['serviceName']} api version {arguments['apiVersion']}."
+        )
+        key = f"{arguments['serviceName']}-{arguments['apiVersion']}"
         generate_sdk(arguments['pathToGenerator'], sdks[key], arguments['outputLocation'], arguments['namespace'],
                      arguments['licenseText'], arguments['standalone'], arguments['enableVirtualOperations'])
 
     if arguments['clientConfigDefaults']:
-        print('Generating {} defaults api version.'.format(arguments['clientConfigDefaults']))
+        print(f"Generating {arguments['clientConfigDefaults']} defaults api version.")
         defaults_definition_path = './code-generation/defaults/sdk-default-configuration.json'
         generate_defaults(arguments['pathToGenerator'], defaults_definition_path, arguments['outputLocation'],
                           arguments['namespace'], arguments['licenseText'])

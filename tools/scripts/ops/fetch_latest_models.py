@@ -14,11 +14,15 @@ import tempfile
 MODELS_SRC_GIT_REPO = "https://github.com/aws/aws-models"
 
 CODE_GENERATION_LOCATION = "./code-generation/"
-CLIENTS_MODELS_LOCATION = CODE_GENERATION_LOCATION + "api-descriptions/"
-ENDPOINT_RULES_LOCATION = CODE_GENERATION_LOCATION + "endpoints/"
+CLIENTS_MODELS_LOCATION = f"{CODE_GENERATION_LOCATION}api-descriptions/"
+ENDPOINT_RULES_LOCATION = f"{CODE_GENERATION_LOCATION}endpoints/"
 
-PARTITIONS_FILE_LOCATION = CODE_GENERATION_LOCATION + "partitions/partitions.json"
-DEFAULTS_FILE_LOCATION = CODE_GENERATION_LOCATION + "defaults/sdk-default-configuration.json"
+PARTITIONS_FILE_LOCATION = (
+    f"{CODE_GENERATION_LOCATION}partitions/partitions.json"
+)
+DEFAULTS_FILE_LOCATION = (
+    f"{CODE_GENERATION_LOCATION}defaults/sdk-default-configuration.json"
+)
 
 
 # Regexp to parse C2J model filename to extract service name and date version
@@ -78,9 +82,11 @@ def _copy_models(aws_reference_models_dir: str,
 
     cloned_items = os.listdir(aws_reference_models_dir)
     for cloned_item in cloned_items:
-        if not cloned_item.startswith(".") and os.path.isdir(aws_reference_models_dir + "/" + cloned_item):
+        if not cloned_item.startswith(".") and os.path.isdir(
+            f"{aws_reference_models_dir}/{cloned_item}"
+        ):
             aws_model_name = cloned_item
-            aws_model_dirs = os.listdir(aws_reference_models_dir + "/" + cloned_item)
+            aws_model_dirs = os.listdir(f"{aws_reference_models_dir}/{cloned_item}")
 
             try:
                 latest_c2j_model_date = str(max(d for d in aws_model_dirs if isinstance(_dir_name_to_date(d), datetime.date)))
@@ -91,7 +97,12 @@ def _copy_models(aws_reference_models_dir: str,
                 shutil.copyfile(f"{aws_reference_models_dir}/{aws_model_name}/{latest_c2j_model_date}/{source_filename}", f"{destination_dir}/{dst_model_name}")
 
                 # remove all models with this name
-                existing_rules_for_this_service = {item for item in existing_rules_set if filtering_regex_pattern.match(item).group("service") == aws_model_name}
+                existing_rules_for_this_service = {
+                    item
+                    for item in existing_rules_set
+                    if filtering_regex_pattern.match(item)["service"]
+                    == aws_model_name
+                }
                 existing_rules_set -= existing_rules_for_this_service
 
             except Exception as exc:
@@ -141,7 +152,7 @@ def copy_partitions(aws_reference_models_dir: str):
 def main():
     temp_dir = tempfile.TemporaryDirectory()
     clone_models(temp_dir)
-    aws_reference_models_dir = temp_dir.name + "/" + "aws-models"
+    aws_reference_models_dir = f"{temp_dir.name}/aws-models"
 
     copy_c2j_models(aws_reference_models_dir)
     copy_endpoints20_rules(aws_reference_models_dir)

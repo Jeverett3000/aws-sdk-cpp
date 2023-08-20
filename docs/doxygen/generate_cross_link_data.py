@@ -13,13 +13,14 @@ def generateDocsMap(apiDefinitionsPath):
     filesInDir = [f for f in listdir(apiDefinitionsPath) if isfile(join(apiDefinitionsPath, f))]
 
     for file in filesInDir:
-        match = re.search('([\w\d-]+)-(\d{4}-\d{2}-\d{2}).normal.json', file)
-        if match:
+        if match := re.search(
+            '([\w\d-]+)-(\d{4}-\d{2}-\d{2}).normal.json', file
+        ):
             with codecs.open(join(apiDefinitionsPath, file), 'rb', 'utf-8') as api_definition:
                 api_content = json.loads(api_definition.read())
                 if "uid" in api_content["metadata"].keys():
                     sdks[api_content["metadata"]["uid"]] = getServiceNameFromMetadata(api_content["metadata"])
-           
+
     return sdks
     
 def getServiceNameFromMetadata(metadataNode):
@@ -46,13 +47,14 @@ def Main():
     parser.add_argument("--apiDefinitionsPath", action="store")
     parser.add_argument("--templatePath", action="store")
     parser.add_argument("--outputPath", action="store")
-    
+
     args = vars( parser.parse_args() )
-    argMap = {}
-    argMap[ "apiDefinitionsPath" ] = args[ "apiDefinitionsPath" ] or "../code-generation/api-descriptions"
-    argMap[ "templatePath" ] = args[ "templatePath" ] or "./"
-    argMap[ "outputPath" ] = args[ "outputPath" ] or "/"
-    
+    argMap = {
+        "apiDefinitionsPath": args["apiDefinitionsPath"]
+        or "../code-generation/api-descriptions",
+        "templatePath": args["templatePath"] or "./",
+        "outputPath": args["outputPath"] or "/",
+    }
     insertDocsMapToRedirect(argMap["apiDefinitionsPath"], argMap["templatePath"], argMap["outputPath"])
     
 Main()    

@@ -31,10 +31,7 @@ endpoints = [
 def remove_cpp_comments(text):
     def replacer(match):
         s = match.group(0)
-        if s.startswith('/'):
-            return " "  # int/**/x=5 -> int x=5, instead of intx=5.
-        else:
-            return s
+        return " " if s.startswith('/') else s
 
     pattern = re.compile(r'//.*?$|/\*.*?\*/|"(?:\\.|[^\\"])*"', re.DOTALL | re.MULTILINE)
     return re.sub(pattern, replacer, text)
@@ -49,9 +46,7 @@ def skip_file(filename):
                                    '|.*tests/.*Test.cpp'
                                    # add more white lists here
                                    )
-    if skip_file_pattern.match(filename):
-        return True
-    return False
+    return bool(skip_file_pattern.match(filename))
 
 
 def scan_content(content):
@@ -84,10 +79,9 @@ def check_file(input_file):
         content = input_file_handler.read()
 
     stripped_content = remove_cpp_comments(content)
-    match = scan_content(stripped_content)
-    if match:
+    if match := scan_content(stripped_content):
         print(input_file)
-        print("..." + stripped_content[match.start(): match.end()] + "...")
+        print(f"...{stripped_content[match.start():match.end()]}...")
         return True
 
     return False
